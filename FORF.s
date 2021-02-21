@@ -339,7 +339,8 @@ EXIT:
 .endm
 .macro get_lexeme
 	pushl $input_buffer
-	pushl $getline call scanf
+	pushl $getline
+	call scanf
 	drop
 .endm
 .macro input_buffer
