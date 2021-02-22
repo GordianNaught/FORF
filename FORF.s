@@ -1,25 +1,11 @@
 #FORF compiler
 .section .data
 greeting:
-  .asciz "FORF: a non-standard, indirect-threaded Forth\n"
+  .asciz "FORF: a non-standard, indirect-threaded FORTH\n"
 output:
   .asciz "%d"
-outputs:
-  .asciz "%d "
-outputnl:
-  .asciz "%d\n"
-hello:
-  .asciz "hello"
-outnl:
-  .asciz "\n"
 getline:
   .asciz "%s"
-depthoutput:
-  .asciz "<%d> "
-BEGIN:
-  .asciz "begin"
-UNTIL:
-  .asciz "until"
 bottom:
   .int 0
 top:
@@ -90,8 +76,6 @@ primitive "2drop" twodrop
 primitive "]" resume_compile
 primitive "uv" get_uv
 primitive "dup" dup
-primitive ".s" s
-primitive "cr" cr
 primitive "+" add
 primitive "quit" EXIT
 primitive "drop" drop
@@ -123,6 +107,9 @@ primitive ">" greater_than
 primitive "tuck" tuck
 primitive "*" multiply
 primitive "fopen" fopen
+primitive "pick" pick
+primitive "nip" nip
+primitive "depth" depth
 /*
 primitive "break" break
 */
@@ -146,9 +133,7 @@ entries_start:
   entry divmod
   entry twodrop
   entry twodup
-  entry s
   entry dup
-  entry cr
   entry add
   entry EXIT
   entry drop
@@ -173,6 +158,9 @@ entries_start:
   entry number
   entry resume_compile
   entry write
+  entry nip
+  entry pick
+  entry depth
 /*
   entry break
 */
@@ -224,6 +212,14 @@ block_buffers:
   pushl %ebx
   pushl %eax
 .endm
+.macro nip
+  popl %eax
+  movl %eax, (%esp)
+.endm
+.macro pick
+  popl %eax
+  pushl (%eax)
+.endm
 .macro rot
   popl %eax
   popl %ebx
@@ -251,11 +247,6 @@ block_buffers:
   sall %cl, %eax
   pushl %eax
 .endm
-.macro cr
-  pushl $outnl
-  call printf
-  addl $cell, %esp
-.endm
 .macro shiftr
   popl %eax
   sarl %eax
@@ -273,9 +264,7 @@ block_buffers:
 .endm
 .macro bitwise_and
   popl %eax
-  popl %ebx
-  andl %eax, %ebx
-  pushl %ebx
+  andl %eax, (%esp)
 .endm
 .macro rput
   subl $cell, r
@@ -301,16 +290,6 @@ greater_than:
 greater_than_true:
   pushl $-1
   exit
-
-
-zero:
-  header
-  pushl $0
-  exit
-one:
-  header
-  pushl $1
-  exit
 EXIT:
   call exit
 .macro fetch
@@ -322,9 +301,8 @@ EXIT:
   pushl %eax
 .endm
 .macro depth
-  movl %esp, %edx
   movl top, %eax
-  subl %edx, %eax
+  subl %esp, %eax
   sarl $2, %eax
   pushl %eax
 .endm
@@ -362,9 +340,6 @@ Subtract-with-borrow, so eax -= eax + carry. (The "eax - eax"
   cmpl $1, (%esp)
   sbbl %eax, %eax
   movl %eax, (%esp)
-.endm
-.macro stringequal
-  
 .endm
 .macro Cfetch
   movl (%esp), %esi
@@ -409,6 +384,8 @@ Subtract-with-borrow, so eax -= eax + carry. (The "eax - eax"
 .macro fopen
   call fopen
 .endm
+FUNCTION pick
+FUNCTION nip
 FUNCTION fopen
 FUNCTION multiply
 FUNCTION tuck
@@ -422,7 +399,6 @@ FUNCTION emit
 FUNCTION dup
 FUNCTION rot
 FUNCTION add
-FUNCTION cr
 FUNCTION shiftl
 FUNCTION shiftr
 FUNCTION urput
@@ -469,34 +445,7 @@ get_uv:
   header
   pushl $uv
   exit
-s:
-  rput                # protect return address
-  depth               # put depth on stack
-  pushl $depthoutput  # push format for printing
-  call printf         # print
-  addl $8, %esp       # clean stack after print
-  cmpl top, %esp      # if %esp at top
-  je semptystack      # empty stack
-        # else
-  movl top, %ebp      # move top to %ebp
-sloop:
-  subl $cell, %ebp    # move %ebp to next cell
-  pushl (%ebp)        # push value
-  pushl $outputs      # push print format
-  call printf         # print
-  addl $8, %esp       # clean stack after print
-  cmp %ebp, %esp      # see if reached bottom of stack
-  jne sloop           # if not not reached bottom
-                      # do next cell
-semptystack:
-  rget                # retrieve return address
-  ret                 # return
 
-.macro greeting
-  pushl $greeting
-  call printf
-  drop
-.endm
   # while (*a == *b) { if (!*a) { return true; } a++; b++ } return false;
 
 compare:
@@ -507,22 +456,22 @@ compare:
 compare_loop:
   cmpsb
   jne compare_not_equal  # if characters not equal
-          # jmp to not equal
-  cmpb $NULL, (%esi)  # if string 1 at end
-  je compare_end_one    # push 1
-  pushl $FALSE        # else push 0
+                           # jmp to not equal
+  cmpb $NULL, (%esi)     # if string 1 at end
+  je compare_end_one       # push 1
+  pushl $FALSE           # else push 0
 compare_second:
-  cmpb $NULL, (%edi)  # if string 2 at end
-  je compare_end_two    # push 1
-  pushl $FALSE        # else push 0
+  cmpb $NULL, (%edi)     # if string 2 at end
+  je compare_end_two       # push 1
+  pushl $FALSE           # else push 0
 after_checked_ends:
-  add                   # find number of words at end
+  add                    # find number of words at end
   popl %eax
-  cmpl $2, %eax         # if both words at end
-  je compare_equal        # equal
-  cmpl $1, %eax         # if one word at end
-  je compare_not_equal    # not equal
-  jmp compare_loop      # else check next character  
+  cmpl $2, %eax          # if both words at end
+  je compare_equal         # equal
+  cmpl $1, %eax          # if one word at end
+  je compare_not_equal     # not equal
+  jmp compare_loop       # else check next character
 compare_end_one:
   pushl $1
   jmp compare_second
@@ -691,24 +640,24 @@ condBranch:
   je if_cond_false
   exit
 if_cond_false:
-        rget
-        rget
-        subl $cell, %ebx
-        movl %ebx, (%esp)
-        rput
-        rput
-        exit
+  rget
+  rget
+  subl $cell, %ebx
+  movl %ebx, (%esp)
+  rput
+  rput
+  exit
 
 OBranch:
   header
   popl %ebx
-        rget
-        rget
-        subl $cell, %ebx
-        movl %ebx, (%esp)
-        rput
-        rput
-        exit
+  rget
+  rget
+  subl $cell, %ebx
+  movl %ebx, (%esp)
+  rput
+  rput
+  exit
 
 suspend_compile_compile:
   drop
@@ -773,6 +722,12 @@ colon_done:
   rget            # retrieve return address
   ret             # return
 
+.macro greeting
+  pushl $greeting
+  call printf
+  drop
+.endm
+
 .globl main
 main:
   movl %esp, top
@@ -784,15 +739,13 @@ masterloop:
   cmpl $FALSE, (%esp)  # if not found
   je faillookup          # failed lookup
                        # else (if found)
-  swap                   # ( lexadr exeptr--exeptr lexadr)
-  drop                   # --exeptr)
+  nip                    # ( lexadr exeptr--exeptr)
   call execute           # execute (assumed to consume argument)
                          # ( --)
-  jmp done
+  jmp masterloop       # interpret next lexeme
 faillookup:            # if failed lookup
   drop                   # drop false from stack
   number                 # interpret as number
-done:
   jmp masterloop       # interpret next lexeme
 
   call exit

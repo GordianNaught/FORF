@@ -52,8 +52,9 @@ variable g
 ;
 : postpone   ' literal , ; immediate
 : case   0 >r ; immediate
-
 : of   r> 1+ >r postpone if ; immediate
 : endof   postpone else ; immediate
 : endcase   r> 0 do postpone then loop ; immediate
-
+: CR   10 emit ;
+: return   0 , ; immediate
+: .s   ." <" depth . ." >" depth 0= if CR return then depth 1 + 1 do ."  " depth I - pick . loop CR ;
